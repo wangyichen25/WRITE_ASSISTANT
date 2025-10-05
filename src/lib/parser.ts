@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import iconv from "iconv-lite";
+import chardet from "chardet";
 import { htmlToPlainText } from "@/lib/html2text";
 
 const TEXT_EXTENSIONS = new Set([".txt", ".md", ".markdown"]);
@@ -66,16 +67,45 @@ export async function extractTextFromFile(
 }
 
 function decodeBuffer(buffer: Buffer, mimeType?: string): string {
+  if (buffer.length === 0) {
+    return "";
+  }
+
+  const asUtf8 = buffer.toString("utf8");
+  if (!asUtf8.includes("\uFFFD")) {
+    return stripBom(asUtf8);
+  }
+
+  const detected = chardet.detect(buffer);
+  if (detected) {
+    const normalized = normalizeEncoding(detected);
+    if (iconv.encodingExists(normalized)) {
+      try {
+        return stripBom(iconv.decode(buffer, normalized));
+      } catch (error) {
+        console.warn(`Failed to decode buffer using detected encoding "${detected}"`, error);
+      }
+    }
+  }
+
   if (mimeType === "text/plain" || mimeType === "text/markdown") {
-    return buffer.toString("utf8");
+    return stripBom(asUtf8);
   }
 
   try {
-    return iconv.decode(buffer, "utf8");
+    return stripBom(iconv.decode(buffer, "utf8"));
   } catch (error) {
     console.warn("Failed to decode buffer as UTF-8", error);
-    return buffer.toString();
+    return stripBom(asUtf8);
   }
+}
+
+function stripBom(value: string): string {
+  return value.replace(/^\uFEFF/, "");
+}
+
+function normalizeEncoding(value: string): string {
+  return value.trim().toLowerCase();
 }
 
 function cleanPlainText(text: string): string {

@@ -26,6 +26,8 @@ export function ModelSettings({ className }: ModelSettingsProps) {
   const setOnlineMode = useEditorStore((state) => state.setOnlineMode);
   const contextRepairEnabled = useEditorStore((state) => state.contextRepairEnabled);
   const setContextRepairEnabled = useEditorStore((state) => state.setContextRepairEnabled);
+  const theme = useEditorStore((state) => state.theme);
+  const setTheme = useEditorStore((state) => state.setTheme);
   const contextWindow = useEditorStore((state) => state.contextWindow);
   const setContextWindow = useEditorStore((state) => state.setContextWindow);
   const temperature = useEditorStore((state) => state.temperature);
@@ -165,6 +167,31 @@ export function ModelSettings({ className }: ModelSettingsProps) {
             onCheckedChange={setContextRepairEnabled}
           />
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="global-theme" className="text-sm font-medium">
+          Theme
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          Switch between light and dark mode, or follow your system preference.
+        </p>
+        <Select value={theme} onValueChange={(value) => setTheme(value as typeof theme)}>
+          <SelectTrigger id="global-theme" className="h-9 w-full">
+            <SelectValue placeholder="Choose theme" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="system" className="text-sm">
+              System Default
+            </SelectItem>
+            <SelectItem value="light" className="text-sm">
+              Light
+            </SelectItem>
+            <SelectItem value="dark" className="text-sm">
+              Dark
+            </SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="space-y-2">

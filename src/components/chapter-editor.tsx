@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { plainTextToHtml } from "@/lib/text-utils";
 import { HoverRewrite } from "@/components/hover-rewrite";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import { DiffViewer } from "@/components/diff-viewer";
 
 function docToPlainText(editor: Editor | null) {
   if (!editor) return "";
@@ -49,6 +51,14 @@ export function ChapterEditor({ chapterId }: ChapterEditorProps) {
   const maxTokens = useEditorStore((state) => state.maxTokens);
   const [localText, setLocalText] = useState("");
   const lastSaved = useRef<string>("");
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const setChapterScrollPosition = useEditorStore((state) => state.setChapterScrollPosition);
+  const storedScrollPosition = useEditorStore(
+    useCallback(
+      (state) => (chapterId ? state.chapterScrollPositions[chapterId] ?? 0 : 0),
+      [chapterId],
+    ),
+  );
 
   const updateChapterCache = useCallback(
     (nextContent: string, updatedAt?: string) => {
@@ -80,6 +90,10 @@ export function ChapterEditor({ chapterId }: ChapterEditorProps) {
     },
   });
 
+  const originalChapterRef = useRef<string>("");
+  const lastLoadedChapterId = useRef<string | null>(null);
+  const [diffOpen, setDiffOpen] = useState(false);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -101,6 +115,42 @@ export function ChapterEditor({ chapterId }: ChapterEditorProps) {
     editor.setEditable(Boolean(chapterId));
   }, [editor, chapterId]);
 
+  useEffect(() => {
+    if (!chapterId) return;
+    const node = scrollRef.current;
+    if (!node) return;
+    const handle = () => {
+      if (!chapterId) return;
+      setChapterScrollPosition(chapterId, node.scrollTop);
+    };
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(handle);
+    };
+    node.addEventListener("scroll", onScroll);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      node.removeEventListener("scroll", onScroll);
+    };
+  }, [chapterId, setChapterScrollPosition]);
+
+  useEffect(() => {
+    if (!chapterId) return;
+    const node = scrollRef.current;
+    if (!node) return;
+    const desired = storedScrollPosition ?? 0;
+    if (Math.abs(node.scrollTop - desired) < 1) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = desired;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [chapterId, storedScrollPosition]);
+
   // Sync editor with loaded chapter
   useEffect(() => {
     if (!editor) return;
@@ -110,6 +160,12 @@ export function ChapterEditor({ chapterId }: ChapterEditorProps) {
       lastSaved.current = "";
       return;
     }
+    if (lastLoadedChapterId.current !== data.chapter.id) {
+      originalChapterRef.current = data.chapter.content;
+      lastLoadedChapterId.current = data.chapter.id;
+      setDiffOpen(false);
+    }
+
     const html = plainTextToHtml(data.chapter.content);
     editor.commands.setContent(html, { emitUpdate: false });
     const text = docToPlainText(editor);
@@ -198,12 +254,35 @@ export function ChapterEditor({ chapterId }: ChapterEditorProps) {
   return (
     <div className="flex h-full flex-1 flex-col">
       <div className="border-b px-6 py-4">
-        <h2 className="text-lg font-semibold">{data.chapter.title}</h2>
-        <p className="text-xs text-muted-foreground">
-          Last updated {new Date(data.chapter.updatedAt).toLocaleString()}
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">{data.chapter.title}</h2>
+            <p className="text-xs text-muted-foreground">
+              Last updated {new Date(data.chapter.updatedAt).toLocaleString()}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDiffOpen((value) => !value)}
+            disabled={!editor}
+          >
+            {diffOpen ? "Hide Changes" : "Show Changes"}
+          </Button>
+        </div>
+        {diffOpen ? (
+          <div className="mt-4 space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Showing differences between the original chapter and your current edits.
+            </p>
+            <DiffViewer
+              original={originalChapterRef.current ?? ""}
+              revised={localText}
+            />
+          </div>
+        ) : null}
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea ref={scrollRef} className="flex-1">
         <div className="relative px-6 py-4">
           {bubbleProps && <HoverRewrite {...bubbleProps} />}
           <EditorContent editor={editor} className="max-w-none" />

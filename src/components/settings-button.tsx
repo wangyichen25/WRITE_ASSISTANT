@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Settings, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { ModelSettings } from "@/components/model-settings";
 
 export function SettingsButton() {
@@ -51,10 +52,10 @@ export function SettingsButton() {
               role="presentation"
             >
               <div
-                className="relative w-full max-w-lg rounded-lg border bg-card p-6 shadow-xl"
+                className="relative flex h-full max-h-[75vh] w-full max-w-lg flex-col rounded-lg border bg-card shadow-xl min-h-0"
                 onClick={(event) => event.stopPropagation()}
               >
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex shrink-0 items-start justify-between gap-4 p-6 pb-4">
                   <div>
                     <h2 className="text-lg font-semibold">Editor Settings</h2>
                     <p className="text-sm text-muted-foreground">
@@ -65,9 +66,9 @@ export function SettingsButton() {
                     <X className="size-4" />
                   </Button>
                 </div>
-                <div className="mt-6">
-                  <ModelSettings />
-                </div>
+                <ScrollArea className="flex-1 min-h-0 px-6 pb-6 pt-2">
+                  <ModelSettings className="space-y-6" />
+                </ScrollArea>
               </div>
             </div>,
             document.body,

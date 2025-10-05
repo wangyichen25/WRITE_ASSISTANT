@@ -41,18 +41,46 @@ export function ChapterList() {
       return;
     }
 
-    const hasSelection = selectedChapterId && chapters.some((chapter) => chapter.id === selectedChapterId);
+    if (chapters.length === 0) {
+      return;
+    }
+
+    const hasSelection = Boolean(
+      selectedChapterId && chapters.some((chapter) => chapter.id === selectedChapterId),
+    );
     const docChanged = lastDocIdRef.current && lastDocIdRef.current !== documentId;
 
-    if (!hasSelection || docChanged) {
+    if (!hasSelection) {
       const fallbackChapter = chapters[0];
       if (fallbackChapter) {
         setSelectedChapterId(fallbackChapter.id, documentId);
       }
     }
 
+    if (docChanged && hasSelection) {
+      // ensure scroll restoration runs when returning to a document with a saved chapter
+      setSelectedChapterId(selectedChapterId, documentId);
+    }
+
     lastDocIdRef.current = documentId;
   }, [documentId, chapters, selectedChapterId, setSelectedChapterId]);
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container || !selectedChapterId) return;
+    const node = container.querySelector<HTMLElement>(
+      `[data-chapter-id="${selectedChapterId}"]`,
+    );
+    if (!node) return;
+    const containerRect = container.getBoundingClientRect();
+    const nodeRect = node.getBoundingClientRect();
+    const currentScroll = container.scrollTop;
+    const nodeTop = nodeRect.top - containerRect.top + currentScroll;
+    const target = nodeTop - container.clientHeight / 2 + nodeRect.height / 2;
+    container.scrollTo({ top: Math.max(target, 0) });
+  }, [selectedChapterId, chapters.length]);
 
   if (!documentId) {
     return (
@@ -116,7 +144,7 @@ export function ChapterList() {
           </div>
         )}
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea ref={scrollRef} className="flex-1">
         <div className="space-y-1 p-2">
           {isLoading ? (
             <div className="p-3 text-sm text-muted-foreground">Loading chapters…</div>
@@ -151,6 +179,7 @@ export function ChapterList() {
                         ? "border-amber-400 bg-amber-50 text-amber-900"
                         : "border-border/60 hover:border-border hover:bg-muted",
                   )}
+                  data-chapter-id={chapter.id}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">

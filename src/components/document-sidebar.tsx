@@ -20,6 +20,8 @@ export function DocumentSidebar() {
   const [search, setSearch] = useState("");
   const fileRef = useRef<HTMLInputElement | null>(null);
   const queryClient = useQueryClient();
+  const dragCounter = useRef(0);
+  const [isDragActive, setIsDragActive] = useState(false);
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -53,8 +55,7 @@ export function DocumentSidebar() {
     },
   });
 
-  const handleSelectFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleFileUpload = async (file: File | undefined) => {
     if (!file) return;
     setUploading(true);
     try {
@@ -70,6 +71,38 @@ export function DocumentSidebar() {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
     }
+  };
+
+  const handleSelectFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    await handleFileUpload(file);
+  };
+
+  const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    dragCounter.current = 0;
+    setIsDragActive(false);
+    const file = event.dataTransfer?.files?.[0];
+    await handleFileUpload(file);
+  };
+
+  const handleDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    dragCounter.current += 1;
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    dragCounter.current = Math.max(dragCounter.current - 1, 0);
+    if (dragCounter.current === 0) {
+      setIsDragActive(false);
+    }
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
   };
 
   const filteredDocuments = documents.filter((doc) =>
@@ -108,7 +141,16 @@ export function DocumentSidebar() {
   }, [documents, selectedDocumentId, setSelectedDocumentId]);
 
   return (
-    <div className="flex h-full w-72 flex-col border-r bg-card">
+    <div
+      className={cn(
+        "flex h-full w-72 flex-col border-r bg-card transition",
+        isDragActive && "border-primary ring-2 ring-primary/30",
+      )}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <div className="space-y-3 border-b px-4 py-4">
         <div>
           <h1 className="text-base font-semibold">Write Assistant</h1>
@@ -123,6 +165,11 @@ export function DocumentSidebar() {
             disabled={uploading}
           />
           {uploading && <p className="text-xs text-muted-foreground">Uploading…</p>}
+          {!uploading && (
+            <p className="text-xs text-muted-foreground">
+              or drag & drop a document anywhere in this panel
+            </p>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="search" className="text-xs text-muted-foreground">

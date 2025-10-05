@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BubbleMenu } from "@tiptap/react/menus";
+import type { BubbleMenuProps } from "@tiptap/react/menus";
 import type { Editor } from "@tiptap/react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -74,6 +75,8 @@ export function HoverRewrite({
   const [lastSelection, setLastSelection] = useState<SelectionRange>(null);
   const blurTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPinnedRef = useRef(isPinned);
+  const bubbleContainerRef = useRef<HTMLDivElement | null>(null);
+  const ignoreNextBlur = useRef(false);
 
   useEffect(() => {
     setModel(defaultModel);
@@ -188,23 +191,7 @@ export function HoverRewrite({
           ? payload.chapterText
           : fallbackText;
 
-      editor.commands.setContent(plainTextToHtml(finalText), { emitUpdate: false });
-
       const responseRange = payload.range as { start: number; end: number } | undefined;
-      if (responseRange) {
-        const mappedFrom = docPosFromPlainTextOffset(editor, responseRange.start);
-        const mappedTo = docPosFromPlainTextOffset(editor, responseRange.end);
-        if (mappedFrom !== null && mappedTo !== null) {
-          editor.chain().focus().setTextSelection({ from: mappedFrom, to: mappedTo }).run();
-        } else {
-          editor.chain().focus().run();
-        }
-      } else {
-        editor.chain().focus().run();
-      }
-
-      await onApply(finalText);
-      setIsPinned(true);
 
       const contextInfoRaw = payload.contextAdjustments as
         | { applied?: boolean; notes?: string | null }
@@ -220,6 +207,23 @@ export function HoverRewrite({
                   : null,
             }
           : null;
+
+      editor.commands.setContent(plainTextToHtml(finalText), { emitUpdate: false });
+
+      if (responseRange) {
+        const mappedFrom = docPosFromPlainTextOffset(editor, responseRange.start);
+        const mappedTo = docPosFromPlainTextOffset(editor, responseRange.end);
+        if (mappedFrom !== null && mappedTo !== null) {
+          editor.chain().focus().setTextSelection({ from: mappedFrom, to: mappedTo }).run();
+        } else {
+          editor.chain().focus().run();
+        }
+      } else {
+        editor.chain().focus().run();
+      }
+
+      await onApply(finalText);
+      setIsPinned(true);
 
       let toastMessage = "Rewrite applied";
       if (contextInfo?.applied) {
@@ -238,21 +242,69 @@ export function HoverRewrite({
     }
   };
 
-  const pinBubble = () => {
+  const pinBubble = useCallback(() => {
     if (blurTimeout.current) clearTimeout(blurTimeout.current);
     if (!isPinnedRef.current) {
       isPinnedRef.current = true;
     }
-    if (!isPinned) setIsPinned(true);
-  };
+    setIsPinned(true);
+  }, []);
 
-  const unpinBubble = () => {
+  const unpinBubble = useCallback(() => {
     if (blurTimeout.current) clearTimeout(blurTimeout.current);
     blurTimeout.current = setTimeout(() => {
       isPinnedRef.current = false;
       setIsPinned(false);
     }, 150);
-  };
+  }, []);
+
+  const collapseBubble = useCallback(() => {
+    if (blurTimeout.current) clearTimeout(blurTimeout.current);
+    isPinnedRef.current = false;
+    setIsPinned(false);
+    setLastSelection(null);
+    const { to } = editor.state.selection;
+    editor.chain().focus().setTextSelection({ from: to, to }).run();
+  }, [editor]);
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const { current } = bubbleContainerRef;
+      if (!current) return;
+      const target = event.target as Node | null;
+      if (!target) return;
+
+      const isInBubble = current.contains(target);
+      const isInPortaledUi =
+        target instanceof HTMLElement && Boolean(target.closest("[data-keep-hover-bubble]"));
+
+      if (isInBubble || isInPortaledUi) {
+        ignoreNextBlur.current = true;
+        pinBubble();
+      } else {
+        ignoreNextBlur.current = false;
+        unpinBubble();
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [pinBubble, unpinBubble]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        collapseBubble();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [collapseBubble]);
 
   const bubbleMenuOptions = useMemo(
     () => ({
@@ -263,82 +315,120 @@ export function HoverRewrite({
   );
 
   const range = getActiveRange();
+  const hasStoredSelection = Boolean(range);
+
+  const bubbleShouldShow = useCallback<NonNullable<BubbleMenuProps["shouldShow"]>>(
+    ({ editor: ed, element, from, to }) => {
+      if (!ed.isEditable) return false;
+      if (isPinnedRef.current) return true;
+
+      const activeElement = typeof document !== "undefined" ? document.activeElement : null;
+      if (activeElement && element.contains(activeElement)) {
+        return true;
+      }
+
+      if (from !== to) {
+        return true;
+      }
+
+      return hasStoredSelection;
+    },
+    [hasStoredSelection]
+  );
 
   return (
     <BubbleMenu
       editor={editor}
       className="z-30"
       options={bubbleMenuOptions}
-      shouldShow={({ editor: ed }) => {
-        if (isPinnedRef.current) return true;
-        const { from, to } = ed.state.selection;
-        return from !== to;
-      }}
+      shouldShow={bubbleShouldShow}
     >
       <div
+        ref={bubbleContainerRef}
         className="w-80 rounded-lg border bg-popover p-3 text-popover-foreground shadow"
         style={{ maxWidth: 360 }}
-        
-        
-        
+        onPointerDownCapture={() => {
+          ignoreNextBlur.current = true;
+          pinBubble();
+        }}
+        onFocusCapture={() => {
+          pinBubble();
+        }}
+        onBlurCapture={(event) => {
+          if (ignoreNextBlur.current) {
+            ignoreNextBlur.current = false;
+            return;
+          }
+          const nextTarget = event.relatedTarget;
+          if (nextTarget && bubbleContainerRef.current?.contains(nextTarget as Node)) {
+            return;
+          }
+          unpinBubble();
+        }}
       >
-        <div className="space-y-2">
+        <div className="space-y-3">
           {promptPresets.length > 0 && (
-            <div className="space-y-1">
-              <Label htmlFor="preset" className="text-xs text-muted-foreground">
-                Prompt preset
-              </Label>
-              <Select
-                value={selectedPresetId ?? "__none__"}
-                onValueChange={(value) => {
-                  if (value === "__none__") {
-                    setSelectedPresetId(null);
+              <div className="space-y-1">
+                <Label htmlFor="preset" className="text-xs text-muted-foreground">
+                  Prompt preset
+                </Label>
+                <Select
+                    value={selectedPresetId ?? "__none__"}
+                    onValueChange={(value) => {
+                      if (value === "__none__") {
+                        setSelectedPresetId(null);
+                        return;
+                      }
+                      const preset = promptPresets.find((entry) => entry.id === value);
+                      if (!preset) return;
+                      setSelectedPresetId(value);
+                      setInstruction(preset.content);
+                    }}
+                  >
+                    <SelectTrigger id="preset" className="h-8 text-xs">
+                      <SelectValue placeholder="Select preset" />
+                    </SelectTrigger>
+                    <SelectContent data-keep-hover-bubble>
+                      <SelectItem value="__none__" className="text-xs text-muted-foreground">
+                        Custom instruction
+                      </SelectItem>
+                      {promptPresets.map((preset) => (
+                        <SelectItem key={preset.id} value={preset.id} className="text-xs">
+                          {preset.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <Textarea
+                placeholder="e.g. Tighten the prose while keeping the narrator's voice."
+                value={instruction}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setInstruction(value);
+                  if (promptPresets.length > 0) {
+                    const matched = promptPresets.find((preset) => preset.content === value.trim());
+                    setSelectedPresetId(matched ? matched.id : null);
+                  }
+                }}
+                rows={3}
+                className="resize-none text-sm"
+                onFocus={() => {
+                  pinBubble();
+                  const activeRange = range ?? getActiveRange();
+                  if (activeRange) {
+                    editor.chain().setTextSelection(activeRange).run();
+                  }
+                }}
+                onBlur={(event) => {
+                  const nextTarget = event.relatedTarget;
+                  if (nextTarget && bubbleContainerRef.current?.contains(nextTarget as Node)) {
                     return;
                   }
-                  const preset = promptPresets.find((entry) => entry.id === value);
-                  if (!preset) return;
-                  setSelectedPresetId(value);
-                  setInstruction(preset.content);
+                  unpinBubble();
                 }}
-              >
-                <SelectTrigger id="preset" className="h-8 text-xs">
-                  <SelectValue placeholder="Select preset" />
-                </SelectTrigger>
-                <SelectContent  >
-                  <SelectItem value="__none__" className="text-xs text-muted-foreground">
-                    Custom instruction
-                  </SelectItem>
-                  {promptPresets.map((preset) => (
-                    <SelectItem key={preset.id} value={preset.id} className="text-xs">
-                      {preset.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          <Textarea
-            placeholder="e.g. Tighten the prose while keeping the narrator's voice."
-            value={instruction}
-            onChange={(event) => {
-              const value = event.target.value;
-              setInstruction(value);
-              if (promptPresets.length > 0) {
-                const matched = promptPresets.find((preset) => preset.content === value.trim());
-                setSelectedPresetId(matched ? matched.id : null);
-              }
-            }}
-            rows={3}
-            className="resize-none text-sm"
-            onFocus={() => {
-              pinBubble();
-              const activeRange = range ?? getActiveRange();
-              if (activeRange) {
-                editor.chain().setTextSelection(activeRange).run();
-              }
-            }}
-            onBlur={unpinBubble}
-          />
+              />
           <div className="flex items-center gap-2">
             <Label htmlFor="model" className="text-xs font-medium text-muted-foreground">
               Model
@@ -347,7 +437,7 @@ export function HoverRewrite({
               <SelectTrigger id="model" className="h-8 flex-1 text-xs">
                 <SelectValue placeholder="Select model" />
               </SelectTrigger>
-              <SelectContent  >
+              <SelectContent data-keep-hover-bubble>
                 {models.map((option) => (
                   <SelectItem key={option} value={option} className="text-xs">
                     {option}
@@ -360,7 +450,7 @@ export function HoverRewrite({
             <Label htmlFor="online" className="text-xs text-muted-foreground">
               Enable online context
             </Label>
-            <Switch id="online" checked={online} onCheckedChange={setOnline}  />
+            <Switch id="online" checked={online} onCheckedChange={setOnline} />
           </div>
           <div className="flex items-center justify-between">
             <Label htmlFor="repair-context" className="text-xs text-muted-foreground">
@@ -370,7 +460,6 @@ export function HoverRewrite({
               id="repair-context"
               checked={contextRepairEnabled}
               onCheckedChange={setContextRepairEnabled}
-              
             />
           </div>
           <Button size="sm" className="w-full" onClick={handleRewrite} disabled={loading}>

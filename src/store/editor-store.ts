@@ -11,6 +11,8 @@ export type PromptPreset = {
   content: string;
 };
 
+export type ThemePreference = "light" | "dark" | "system";
+
 type EditorState = {
   selectedDocumentId?: string;
   selectedChapterIdByDoc: Record<string, string | undefined>;
@@ -18,17 +20,20 @@ type EditorState = {
   customModels: string[];
   onlineMode: boolean;
   contextRepairEnabled: boolean;
+  theme: ThemePreference;
   contextWindow: number;
   rewriteMode: RewriteMode;
   temperature: number;
   maxTokens: number;
   promptPresets: PromptPreset[];
+  chapterScrollPositions: Record<string, number>;
   setSelectedDocumentId: (id?: string) => void;
   setSelectedChapterId: (chapterId?: string, documentId?: string) => void;
   setDefaultModel: (model: string) => void;
   setCustomModels: (models: string[]) => void;
   setOnlineMode: (value: boolean) => void;
   setContextRepairEnabled: (value: boolean) => void;
+  setTheme: (value: ThemePreference) => void;
   setContextWindow: (value: number) => void;
   setRewriteMode: (mode: RewriteMode) => void;
   setTemperature: (value: number) => void;
@@ -36,6 +41,7 @@ type EditorState = {
   addPromptPreset: (preset: { name: string; content: string }) => void;
   updatePromptPreset: (preset: PromptPreset) => void;
   removePromptPreset: (presetId: string) => void;
+  setChapterScrollPosition: (chapterId: string, position: number) => void;
 };
 
 const DEFAULT_MODEL = "anthropic/claude-sonnet-4.5";
@@ -60,11 +66,13 @@ export const useEditorStore = create<EditorState>()(
       customModels: [],
       onlineMode: false,
       contextRepairEnabled: false,
+      theme: "system",
       contextWindow: DEFAULT_CONTEXT_WINDOW,
       rewriteMode: "replace",
       temperature: DEFAULT_TEMPERATURE,
       maxTokens: DEFAULT_MAX_TOKENS,
       promptPresets: [],
+      chapterScrollPositions: {},
       setSelectedDocumentId: (id) => {
         const current = get().selectedDocumentId;
         if (current === id) return;
@@ -108,6 +116,7 @@ export const useEditorStore = create<EditorState>()(
         })),
       setOnlineMode: (value) => set({ onlineMode: value }),
       setContextRepairEnabled: (value) => set({ contextRepairEnabled: value }),
+      setTheme: (value) => set({ theme: value }),
       setContextWindow: (value) =>
         set((state) => {
           const next = clampContextWindow(value);
@@ -161,6 +170,13 @@ export const useEditorStore = create<EditorState>()(
         set((state) => ({
           promptPresets: state.promptPresets.filter((entry) => entry.id !== presetId),
         })),
+      setChapterScrollPosition: (chapterId, position) =>
+        set((state) => ({
+          chapterScrollPositions: {
+            ...state.chapterScrollPositions,
+            [chapterId]: position,
+          },
+        })),
     }),
     {
       name: "write-assistant-settings",
@@ -172,6 +188,7 @@ export const useEditorStore = create<EditorState>()(
         customModels: state.customModels,
         onlineMode: state.onlineMode,
         contextRepairEnabled: state.contextRepairEnabled,
+        theme: state.theme,
         contextWindow: state.contextWindow,
         rewriteMode: state.rewriteMode,
         temperature: state.temperature,
@@ -179,6 +196,7 @@ export const useEditorStore = create<EditorState>()(
         selectedDocumentId: state.selectedDocumentId,
         selectedChapterIdByDoc: state.selectedChapterIdByDoc,
         promptPresets: state.promptPresets,
+        chapterScrollPositions: state.chapterScrollPositions,
       }),
     },
   ),
