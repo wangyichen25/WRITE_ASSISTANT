@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Document {
+  id           String    @id @default(cuid())
+  originalName String
+  mimeType     String
+  lang         String
+  charCount    Int
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  chapters     Chapter[]
+}
+
+model Chapter {
+  id         String         @id @default(cuid())
+  documentId String
+  index      Int
+  title      String
+  startOff   Int
+  endOff     Int
+  content    String
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  document   Document       @relation(fields: [documentId], references: [id])
+  edits      EditOperation[]
+
+  @@index([documentId, index])
+}
+
+model EditOperation {
+  id             String   @id @default(cuid())
+  chapterId      String
+  selectionStart Int
+  selectionEnd   Int
+  instruction    String
+  original       String
+  result         String
+  model          String
+  latencyMs      Int
+  createdAt      DateTime @default(now())
+  chapter        Chapter  @relation(fields: [chapterId], references: [id])
+
+  @@index([chapterId, createdAt])
+}
