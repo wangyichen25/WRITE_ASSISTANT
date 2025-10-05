@@ -164,7 +164,7 @@ export function DocumentSidebar() {
                       }
                     }}
                     className={cn(
-                      "cursor-pointer rounded-md border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                      "group cursor-pointer rounded-md border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                       isSelected
                         ? "border-primary bg-primary/10"
                         : "border-border/60 hover:border-border hover:bg-muted",
@@ -179,7 +179,11 @@ export function DocumentSidebar() {
                       </div>
                       <button
                         type="button"
-                        className="text-xs text-red-500 transition hover:text-red-600 disabled:opacity-50"
+                        className={cn(
+                          "text-xs text-red-500 transition hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 opacity-0",
+                          isDeleting && "opacity-100",
+                          "disabled:opacity-50",
+                        )}
                         onClick={(event) => {
                           event.stopPropagation();
                           handleDeleteDocument(doc);
