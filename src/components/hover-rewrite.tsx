@@ -280,9 +280,9 @@ export function HoverRewrite({
       <div
         className="w-80 rounded-lg border bg-popover p-3 text-popover-foreground shadow"
         style={{ maxWidth: 360 }}
-        onMouseEnter={pinBubble}
-        onMouseLeave={unpinBubble}
-        onPointerDown={pinBubble}
+        
+        
+        
       >
         <div className="space-y-2">
           {promptPresets.length > 0 && (
@@ -306,7 +306,7 @@ export function HoverRewrite({
                 <SelectTrigger id="preset" className="h-8 text-xs">
                   <SelectValue placeholder="Select preset" />
                 </SelectTrigger>
-                <SelectContent onMouseEnter={pinBubble} onMouseLeave={unpinBubble}>
+                <SelectContent  >
                   <SelectItem value="__none__" className="text-xs text-muted-foreground">
                     Custom instruction
                   </SelectItem>
@@ -349,7 +349,7 @@ export function HoverRewrite({
               <SelectTrigger id="model" className="h-8 flex-1 text-xs">
                 <SelectValue placeholder="Select model" />
               </SelectTrigger>
-              <SelectContent onMouseEnter={pinBubble} onMouseLeave={unpinBubble}>
+              <SelectContent  >
                 {models.map((option) => (
                   <SelectItem key={option} value={option} className="text-xs">
                     {option}
@@ -362,7 +362,7 @@ export function HoverRewrite({
             <Label htmlFor="online" className="text-xs text-muted-foreground">
               Enable online context
             </Label>
-            <Switch id="online" checked={online} onCheckedChange={setOnline} onPointerDown={pinBubble} />
+            <Switch id="online" checked={online} onCheckedChange={setOnline}  />
           </div>
           <div className="flex items-center justify-between">
             <Label htmlFor="repair-context" className="text-xs text-muted-foreground">
@@ -372,7 +372,7 @@ export function HoverRewrite({
               id="repair-context"
               checked={contextRepairEnabled}
               onCheckedChange={setContextRepairEnabled}
-              onPointerDown={pinBubble}
+              
             />
           </div>
           <Button size="sm" className="w-full" onClick={handleRewrite} disabled={loading}>
