@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useSearch } from "@/hooks/use-search";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 export function ChapterList() {
   const documentId = useEditorStore((state) => state.selectedDocumentId);
@@ -18,6 +20,18 @@ export function ChapterList() {
   const searchEnabled = query.trim().length > 2;
   const { data: searchResults } = useSearch(documentId, query);
   const chapters = useMemo(() => data?.chapters ?? [], [data?.chapters]);
+  const queryClient = useQueryClient();
+
+  const deleteChapterMutation = useMutation<unknown, Error, string>({
+    mutationFn: async (chapterId) => {
+      const res = await fetch(`/api/chapters/${chapterId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: "Failed to delete chapter" }));
+        throw new Error(error.error ?? "Failed to delete chapter");
+      }
+      return res.json();
+    },
+  });
 
   const lastDocIdRef = useRef<string | undefined>(undefined);
 
@@ -54,6 +68,29 @@ export function ChapterList() {
   const hits = searchEnabled ? searchResults?.hits ?? [] : [];
   const hitChapterIds = new Set(hits.map((hit) => hit.chapterId));
 
+  const handleDeleteChapter = async (chapter: { id: string; title: string }) => {
+    if (!documentId) return;
+    const confirmed = window.confirm(`Delete chapter "${chapter.title}"? This cannot be undone.`);
+    if (!confirmed) return;
+    try {
+      await deleteChapterMutation.mutateAsync(chapter.id);
+      toast.success(`Deleted ${chapter.title}`);
+      if (selectedChapterId === chapter.id) {
+        setSelectedChapterId(undefined, documentId);
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["chapters"] }),
+        queryClient.invalidateQueries({ queryKey: ["search"] }),
+        queryClient.invalidateQueries({ queryKey: ["documents"] }),
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete chapter";
+      toast.error(message);
+    }
+  };
+
+  const deletingChapterId = deleteChapterMutation.isPending ? deleteChapterMutation.variables : null;
+
   return (
     <div className="flex h-full w-72 flex-col border-r bg-card/40">
       <div className="space-y-2 border-b px-4 py-4">
@@ -88,33 +125,63 @@ export function ChapterList() {
           ) : chapters.length === 0 ? (
             <div className="p-3 text-sm text-muted-foreground">No chapters detected.</div>
           ) : (
-            chapters.map((chapter) => (
-              <button
-                key={chapter.id}
-                type="button"
-                onClick={() => setSelectedChapterId(chapter.id, documentId)}
-                className={cn(
-                  "w-full rounded-md border px-3 py-2 text-left text-sm transition",
-                  chapter.id === selectedChapterId
-                    ? "border-primary bg-primary/10"
-                    : hitChapterIds.has(chapter.id)
-                      ? "border-amber-400 bg-amber-50 text-amber-900"
-                      : "hover:border-border hover:bg-muted",
-                )}
-              >
-                <div className="font-medium">
-                  {chapter.index + 1}. {chapter.title}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Updated {new Date(chapter.updatedAt).toLocaleDateString()}
-                </div>
-                {hitChapterIds.has(chapter.id) && (
-                  <div className="mt-1 line-clamp-2 text-xs text-amber-800">
-                    {hits.find((hit) => hit.chapterId === chapter.id)?.snippet}
+            chapters.map((chapter) => {
+              const isSelected = chapter.id === selectedChapterId;
+              const isHit = hitChapterIds.has(chapter.id);
+              const isDeleting = deletingChapterId === chapter.id;
+              const snippet = hits.find((hit) => hit.chapterId === chapter.id)?.snippet;
+              return (
+                <div
+                  key={chapter.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isSelected}
+                  onClick={() => setSelectedChapterId(chapter.id, documentId!)}
+                  onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedChapterId(chapter.id, documentId!);
+                    }
+                  }}
+                  className={cn(
+                    "cursor-pointer rounded-md border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                    isSelected
+                      ? "border-primary bg-primary/10"
+                      : isHit
+                        ? "border-amber-400 bg-amber-50 text-amber-900"
+                        : "border-border/60 hover:border-border hover:bg-muted",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <div className="font-medium">
+                        {chapter.index + 1}. {chapter.title}
+                      </div>
+                      <div className={cn("text-xs", isHit ? "text-amber-800" : "text-muted-foreground")}>
+                        Updated {new Date(chapter.updatedAt).toLocaleDateString()}
+                      </div>
+                      {snippet && (
+                        <div className="mt-1 line-clamp-2 text-xs text-amber-800">
+                          {snippet}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="text-xs text-red-500 transition hover:text-red-600 disabled:opacity-50"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleDeleteChapter(chapter);
+                      }}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      disabled={isDeleting}
+                    >
+                      {isDeleting ? "Deleting…" : "Delete"}
+                    </button>
                   </div>
-                )}
-              </button>
-            ))
+                </div>
+              );
+            })
           )}
         </div>
       </ScrollArea>

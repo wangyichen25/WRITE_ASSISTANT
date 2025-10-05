@@ -1,4 +1,4 @@
-import { getChapter, updateChapterContent } from "@/lib/documents";
+import { deleteChapter, getChapter, updateChapterContent } from "@/lib/documents";
 import { upsertChapterSearch } from "@/lib/search";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
@@ -37,5 +37,22 @@ export async function PUT(
   } catch (error) {
     console.error("Failed to update chapter", error);
     return NextResponse.json({ error: "Failed to update" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  context: { params: Promise<{ chapterId: string }> },
+) {
+  try {
+    const { chapterId } = await context.params;
+    await deleteChapter(chapterId);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof Error && error.message === "CHAPTER_NOT_FOUND") {
+      return NextResponse.json({ error: "Chapter not found" }, { status: 404 });
+    }
+    console.error("Failed to delete chapter", error);
+    return NextResponse.json({ error: "Failed to delete chapter" }, { status: 500 });
   }
 }

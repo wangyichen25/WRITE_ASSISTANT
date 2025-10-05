@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export const storageRoot = process.env.STORAGE_ROOT ?? path.join(process.cwd(), "storage");
@@ -32,4 +32,14 @@ export async function ensureDocumentStorage(documentId: string) {
 export async function persistFile(targetPath: string, data: Buffer | string) {
   await mkdir(path.dirname(targetPath), { recursive: true });
   await writeFile(targetPath, data);
+}
+
+export async function removeChapterStorage(documentId: string, chapterId: string) {
+  const chapterPath = getChapterPath(documentId, chapterId);
+  await rm(chapterPath, { force: true }).catch(() => {});
+}
+
+export async function removeDocumentStorage(documentId: string) {
+  const dir = getDocumentDir(documentId);
+  await rm(dir, { force: true, recursive: true }).catch(() => {});
 }

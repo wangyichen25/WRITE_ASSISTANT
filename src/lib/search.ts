@@ -41,6 +41,21 @@ export async function bulkIndexChapters(entries: { chapterId: string; content: s
   }
 }
 
+export async function removeChaptersFromSearch(chapterIds: string[]) {
+  if (chapterIds.length === 0) return;
+  await ensureFtsReady();
+  await prisma.$executeRawUnsafe("BEGIN");
+  try {
+    for (const chapterId of chapterIds) {
+      await prisma.$executeRawUnsafe("DELETE FROM ChapterSearch WHERE chapterId = ?", chapterId);
+    }
+    await prisma.$executeRawUnsafe("COMMIT");
+  } catch (error) {
+    await prisma.$executeRawUnsafe("ROLLBACK");
+    throw error;
+  }
+}
+
 export type SearchHit = {
   chapterId: string;
   snippet: string;

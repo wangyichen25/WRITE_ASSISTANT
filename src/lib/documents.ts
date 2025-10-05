@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { ChapterSegment, SupportedLang } from "@/lib/chapterize";
+import { removeChapterStorage, removeDocumentStorage } from "@/lib/storage";
+import { removeChaptersFromSearch } from "@/lib/search";
 
 export type DocumentSummary = {
   id: string;
@@ -83,6 +85,62 @@ export async function updateChapterContent(chapterId: string, content: string) {
     where: { id: chapterId },
     data: { content },
   });
+}
+
+export async function deleteChapter(chapterId: string) {
+  const chapter = await prisma.chapter.findUnique({
+    where: { id: chapterId },
+    select: { documentId: true, content: true },
+  });
+
+  if (!chapter) {
+    throw new Error("CHAPTER_NOT_FOUND");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.editOperation.deleteMany({ where: { chapterId } });
+    await tx.chapter.delete({ where: { id: chapterId } });
+    const remaining = await tx.chapter.findMany({
+      where: { documentId: chapter.documentId },
+      select: { content: true },
+    });
+    const nextCharCount = remaining.reduce((total, entry) => total + entry.content.length, 0);
+    await tx.document.update({
+      where: { id: chapter.documentId },
+      data: { charCount: nextCharCount },
+    });
+  });
+
+  await removeChaptersFromSearch([chapterId]);
+  await removeChapterStorage(chapter.documentId, chapterId);
+}
+
+export async function deleteDocument(documentId: string) {
+  const existing = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    throw new Error("DOCUMENT_NOT_FOUND");
+  }
+
+  const chapters = await prisma.chapter.findMany({
+    where: { documentId },
+    select: { id: true },
+  });
+  const chapterIds = chapters.map((chapter) => chapter.id);
+
+  await prisma.$transaction(async (tx) => {
+    if (chapterIds.length > 0) {
+      await tx.editOperation.deleteMany({ where: { chapterId: { in: chapterIds } } });
+      await tx.chapter.deleteMany({ where: { documentId } });
+    }
+    await tx.document.delete({ where: { id: documentId } });
+  });
+
+  await removeChaptersFromSearch(chapterIds);
+  await removeDocumentStorage(documentId);
 }
 
 export async function recordEditOperation(params: {

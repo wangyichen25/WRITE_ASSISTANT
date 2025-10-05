@@ -40,6 +40,19 @@ export function DocumentSidebar() {
     },
   });
 
+  const deleteDocumentMutation = useMutation<unknown, Error, string>({
+    mutationFn: async (docId) => {
+      const response = await fetch(`/api/docs/${docId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: "Failed to delete document" }));
+        throw new Error(error.error ?? "Failed to delete document");
+      }
+      return response.json();
+    },
+  });
+
   const handleSelectFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -62,6 +75,29 @@ export function DocumentSidebar() {
   const filteredDocuments = documents.filter((doc) =>
     doc.originalName.toLowerCase().includes(search.toLowerCase()),
   );
+
+  const handleDeleteDocument = async (doc: { id: string; originalName: string }) => {
+    const confirmed = window.confirm(`Delete "${doc.originalName}"? This cannot be undone.`);
+    if (!confirmed) return;
+    try {
+      await deleteDocumentMutation.mutateAsync(doc.id);
+      toast.success(`Deleted ${doc.originalName}`);
+      if (selectedDocumentId === doc.id) {
+        setSelectedDocumentId(undefined);
+      }
+      setSelectedChapterId(undefined, doc.id);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["documents"] }),
+        queryClient.invalidateQueries({ queryKey: ["chapters"] }),
+        queryClient.invalidateQueries({ queryKey: ["search"] }),
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete document";
+      toast.error(message);
+    }
+  };
+
+  const deletingDocumentId = deleteDocumentMutation.isPending ? deleteDocumentMutation.variables : null;
 
   useEffect(() => {
     if (!documents.length) return;
@@ -111,24 +147,52 @@ export function DocumentSidebar() {
             <div className="p-4 text-sm text-muted-foreground">No documents uploaded yet.</div>
           ) : (
             <div className="space-y-1">
-              {filteredDocuments.map((doc) => (
-                <button
-                  key={doc.id}
-                  type="button"
-                  onClick={() => setSelectedDocumentId(doc.id)}
-                  className={cn(
-                    "w-full rounded-md border px-3 py-2 text-left text-sm transition",
-                    doc.id === selectedDocumentId
-                      ? "border-primary bg-primary/10"
-                      : "hover:border-border hover:bg-muted",
-                  )}
-                >
-                  <div className="font-medium">{doc.originalName}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {doc.lang.toUpperCase()} · {(doc.charCount / 1000).toFixed(1)}k chars
+              {filteredDocuments.map((doc) => {
+                const isSelected = doc.id === selectedDocumentId;
+                const isDeleting = deletingDocumentId === doc.id;
+                return (
+                  <div
+                    key={doc.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isSelected}
+                    onClick={() => setSelectedDocumentId(doc.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedDocumentId(doc.id);
+                      }
+                    }}
+                    className={cn(
+                      "cursor-pointer rounded-md border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                      isSelected
+                        ? "border-primary bg-primary/10"
+                        : "border-border/60 hover:border-border hover:bg-muted",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-medium">{doc.originalName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {doc.lang.toUpperCase()} · {(doc.charCount / 1000).toFixed(1)}k chars
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="text-xs text-red-500 transition hover:text-red-600 disabled:opacity-50"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDeleteDocument(doc);
+                        }}
+                        onKeyDown={(event) => event.stopPropagation()}
+                        disabled={isDeleting}
+                      >
+                        {isDeleting ? "Deleting…" : "Delete"}
+                      </button>
+                    </div>
                   </div>
-                </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
