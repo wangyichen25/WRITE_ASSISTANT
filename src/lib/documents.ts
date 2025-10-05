@@ -1,6 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import type { ChapterSegment, SupportedLang } from "@/lib/chapterize";
-import { removeChapterStorage, removeDocumentStorage } from "@/lib/storage";
+import {
+  ensureDocumentStorage,
+  getChapterPath,
+  removeChapterStorage,
+  removeDocumentStorage,
+  persistFile,
+} from "@/lib/storage";
 import { removeChaptersFromSearch } from "@/lib/search";
 
 export type DocumentSummary = {
@@ -81,10 +87,24 @@ export async function getChapter(chapterId: string) {
 }
 
 export async function updateChapterContent(chapterId: string, content: string) {
-  return prisma.chapter.update({
+  const updated = await prisma.chapter.update({
     where: { id: chapterId },
     data: { content },
+    select: {
+      id: true,
+      documentId: true,
+      updatedAt: true,
+    },
   });
+
+  try {
+    await ensureDocumentStorage(updated.documentId);
+    await persistFile(getChapterPath(updated.documentId, updated.id), content);
+  } catch (error) {
+    console.error("Failed to persist chapter file", { chapterId, error });
+  }
+
+  return updated;
 }
 
 export async function deleteChapter(chapterId: string) {
