@@ -269,7 +269,11 @@ export function HoverRewrite({
       editor={editor}
       className="z-30"
       options={bubbleMenuOptions}
-      shouldShow={() => true}
+      shouldShow={({ editor: ed }) => {
+        if (isPinnedRef.current) return true;
+        const { from, to } = ed.state.selection;
+        return from !== to;
+      }}
     >
       <div
         className="w-80 rounded-lg border bg-popover p-3 text-popover-foreground shadow"
