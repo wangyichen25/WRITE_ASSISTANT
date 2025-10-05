@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChapter } from "@/hooks/use-chapter";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
@@ -23,6 +23,22 @@ type ChapterEditorProps = {
   chapterId?: string;
 };
 
+type ChapterQueryResult = {
+  chapter: {
+    id: string;
+    content: string;
+    title: string;
+    index: number;
+    documentId: string;
+    updatedAt: string;
+    document: {
+      id: string;
+      lang: string;
+      originalName: string;
+    };
+  };
+};
+
 export function ChapterEditor({ chapterId }: ChapterEditorProps) {
   const { data, isLoading, isError } = useChapter(chapterId);
   const queryClient = useQueryClient();
@@ -34,16 +50,33 @@ export function ChapterEditor({ chapterId }: ChapterEditorProps) {
   const [localText, setLocalText] = useState("");
   const lastSaved = useRef<string>("");
 
-  const saveMutation = useMutation({
-    mutationFn: async (content: string) => {
+  const updateChapterCache = useCallback(
+    (nextContent: string, updatedAt?: string) => {
       if (!chapterId) return;
+      queryClient.setQueryData<ChapterQueryResult>(["chapter", chapterId], (existing) => {
+        if (!existing?.chapter) return existing;
+        return {
+          chapter: {
+            ...existing.chapter,
+            content: nextContent,
+            updatedAt: updatedAt ?? existing.chapter.updatedAt,
+          },
+        };
+      });
+    },
+    [chapterId, queryClient],
+  );
+
+  const saveMutation = useMutation<{ updatedAt?: string } | undefined, Error, string>({
+    mutationFn: async (content) => {
+      if (!chapterId) return undefined;
       const res = await fetch(`/api/chapters/${chapterId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
       });
       if (!res.ok) throw new Error("Failed to save chapter");
-      return res.json();
+      return (await res.json()) as { updatedAt?: string } | undefined;
     },
   });
 
@@ -91,8 +124,9 @@ export function ChapterEditor({ chapterId }: ChapterEditorProps) {
     if (localText === lastSaved.current || !localText.trim()) return;
     const timeout = setTimeout(() => {
       saveMutation.mutate(localText, {
-        onSuccess: () => {
+        onSuccess: (response) => {
           lastSaved.current = localText;
+          updateChapterCache(localText, response?.updatedAt);
         },
         onError: () => {
           toast.error("Failed to save chapter");
@@ -119,6 +153,7 @@ export function ChapterEditor({ chapterId }: ChapterEditorProps) {
       onApply: async (nextContent: string) => {
         lastSaved.current = nextContent;
         setLocalText(nextContent);
+        updateChapterCache(nextContent);
         await queryClient.invalidateQueries({ queryKey: ["chapter", chapterId] });
         await queryClient.invalidateQueries({ queryKey: ["chapter-history", chapterId] });
       },
@@ -133,6 +168,7 @@ export function ChapterEditor({ chapterId }: ChapterEditorProps) {
     temperature,
     maxTokens,
     queryClient,
+    updateChapterCache,
   ]);
 
   if (!chapterId) {
