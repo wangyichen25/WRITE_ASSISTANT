@@ -1,5 +1,5 @@
 import { applySelectionPatch } from "@/lib/diff";
-import { getChapter, recordEditOperation, updateChapterContent } from "@/lib/documents";
+import { getChapter, getChapterWithNeighbors, recordEditOperation, updateChapterContent } from "@/lib/documents";
 import { buildOnlineContext } from "@/lib/online";
 import { callOpenRouter } from "@/lib/openrouter";
 import type { RouterMessage } from "@/lib/openrouter";
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     if (selectionEnd <= selectionStart) {
       return NextResponse.json({ error: "Selection range is empty" }, { status: 400 });
     }
-    const chapter = await getChapter(chapterId);
+    const { chapter, previous, next } = await getChapterWithNeighbors(chapterId);
     const selectedText = chapter.content.slice(selectionStart, selectionEnd);
     if (!selectedText) {
       return NextResponse.json({ error: "Selection outside chapter bounds" }, { status: 400 });
@@ -100,6 +100,8 @@ export async function POST(request: Request) {
       selectionStart,
       selectionEnd,
       wordsPerSide,
+      previousText: previous?.content ?? "",
+      nextText: next?.content ?? "",
     });
     const online = model.endsWith(":online");
     const repairModel = online ? model.replace(/:online$/, "") : model;
@@ -282,13 +284,24 @@ type ContextParams = {
   selectionStart: number;
   selectionEnd: number;
   wordsPerSide: number;
+  previousText: string;
+  nextText: string;
 };
-function collectContext({ text, selectionStart, selectionEnd, wordsPerSide }: ContextParams) {
+function collectContext({
+  text,
+  selectionStart,
+  selectionEnd,
+  wordsPerSide,
+  previousText,
+  nextText,
+}: ContextParams) {
   if (wordsPerSide <= 0) {
     return { beforeContext: "", afterContext: "" };
   }
-  const before = sliceWordsFromEnd(text.slice(0, selectionStart), wordsPerSide);
-  const after = sliceWordsFromStart(text.slice(selectionEnd), wordsPerSide);
+  const beforeSource = `${previousText ? `${previousText}\n` : ""}${text.slice(0, selectionStart)}`;
+  const afterSource = `${text.slice(selectionEnd)}${nextText ? `\n${nextText}` : ""}`;
+  const before = sliceWordsFromEnd(beforeSource, wordsPerSide);
+  const after = sliceWordsFromStart(afterSource, wordsPerSide);
   return { beforeContext: before, afterContext: after };
 }
 function sliceWordsFromEnd(segment: string, words: number) {

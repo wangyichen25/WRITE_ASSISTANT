@@ -86,6 +86,28 @@ export async function getChapter(chapterId: string) {
   });
 }
 
+export async function getChapterWithNeighbors(chapterId: string) {
+  const chapter = await prisma.chapter.findUniqueOrThrow({
+    where: { id: chapterId },
+    include: { document: true },
+  });
+
+  const [previous, next] = await Promise.all([
+    chapter.index > 0
+      ? prisma.chapter.findFirst({
+          where: { documentId: chapter.documentId, index: chapter.index - 1 },
+          select: { id: true, content: true },
+        })
+      : Promise.resolve(null),
+    prisma.chapter.findFirst({
+      where: { documentId: chapter.documentId, index: chapter.index + 1 },
+      select: { id: true, content: true },
+    }),
+  ]);
+
+  return { chapter, previous, next };
+}
+
 export async function updateChapterContent(chapterId: string, content: string) {
   const updated = await prisma.chapter.update({
     where: { id: chapterId },
