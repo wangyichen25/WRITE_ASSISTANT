@@ -5,6 +5,12 @@ import { clampContextWindow, clampMaxTokens, clampTemperature, DEFAULT_CONTEXT_W
 
 export type RewriteMode = "replace" | "insert";
 
+export type PromptPreset = {
+  id: string;
+  name: string;
+  content: string;
+};
+
 type EditorState = {
   selectedDocumentId?: string;
   selectedChapterIdByDoc: Record<string, string | undefined>;
@@ -16,6 +22,7 @@ type EditorState = {
   rewriteMode: RewriteMode;
   temperature: number;
   maxTokens: number;
+  promptPresets: PromptPreset[];
   setSelectedDocumentId: (id?: string) => void;
   setSelectedChapterId: (chapterId?: string, documentId?: string) => void;
   setDefaultModel: (model: string) => void;
@@ -26,6 +33,9 @@ type EditorState = {
   setRewriteMode: (mode: RewriteMode) => void;
   setTemperature: (value: number) => void;
   setMaxTokens: (value: number) => void;
+  addPromptPreset: (preset: { name: string; content: string }) => void;
+  updatePromptPreset: (preset: PromptPreset) => void;
+  removePromptPreset: (presetId: string) => void;
 };
 
 const DEFAULT_MODEL = "anthropic/claude-sonnet-4.5";
@@ -54,6 +64,7 @@ export const useEditorStore = create<EditorState>()(
       rewriteMode: "replace",
       temperature: DEFAULT_TEMPERATURE,
       maxTokens: DEFAULT_MAX_TOKENS,
+      promptPresets: [],
       setSelectedDocumentId: (id) => {
         const current = get().selectedDocumentId;
         if (current === id) return;
@@ -116,6 +127,40 @@ export const useEditorStore = create<EditorState>()(
           if (next === state.maxTokens) return state;
           return { maxTokens: next };
         }),
+      addPromptPreset: (preset) =>
+        set((state) => {
+          const id = `preset-${Math.random().toString(36).slice(2, 10)}`;
+          const trimmedName = preset.name.trim();
+          const trimmedContent = preset.content.trim();
+          if (!trimmedName || !trimmedContent) return state;
+          return {
+            promptPresets: [
+              ...state.promptPresets,
+              { id, name: trimmedName, content: trimmedContent },
+            ],
+          };
+        }),
+      updatePromptPreset: (preset) =>
+        set((state) => {
+          const trimmedName = preset.name.trim();
+          const trimmedContent = preset.content.trim();
+          if (!trimmedContent) return state;
+          return {
+            promptPresets: state.promptPresets.map((entry) =>
+              entry.id === preset.id
+                ? {
+                    ...entry,
+                    name: trimmedName || entry.name,
+                    content: trimmedContent,
+                  }
+                : entry,
+            ),
+          };
+        }),
+      removePromptPreset: (presetId) =>
+        set((state) => ({
+          promptPresets: state.promptPresets.filter((entry) => entry.id !== presetId),
+        })),
     }),
     {
       name: "write-assistant-settings",
@@ -133,6 +178,7 @@ export const useEditorStore = create<EditorState>()(
         maxTokens: state.maxTokens,
         selectedDocumentId: state.selectedDocumentId,
         selectedChapterIdByDoc: state.selectedChapterIdByDoc,
+        promptPresets: state.promptPresets,
       }),
     },
   ),

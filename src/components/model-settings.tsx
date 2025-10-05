@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MAX_CONTEXT_WINDOW, MAX_MAX_TOKENS, MAX_TEMPERATURE, MIN_MAX_TOKENS, MIN_TEMPERATURE } from "@/lib/rewrite-config";
+import { Textarea } from "@/components/ui/textarea";
 
 type ModelSettingsProps = {
   className?: string;
@@ -32,8 +33,17 @@ export function ModelSettings({ className }: ModelSettingsProps) {
   const setTemperature = useEditorStore((state) => state.setTemperature);
   const maxTokens = useEditorStore((state) => state.maxTokens);
   const setMaxTokens = useEditorStore((state) => state.setMaxTokens);
+  const promptPresets = useEditorStore((state) => state.promptPresets);
+  const addPromptPreset = useEditorStore((state) => state.addPromptPreset);
+  const updatePromptPreset = useEditorStore((state) => state.updatePromptPreset);
+  const removePromptPreset = useEditorStore((state) => state.removePromptPreset);
   const models = data?.models && data.models.length > 0 ? data.models : Array.from(new Set([...customModels, defaultModel]));
   const [newModel, setNewModel] = useState("");
+  const [presetName, setPresetName] = useState("");
+  const [presetContent, setPresetContent] = useState("");
+  const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [editingContent, setEditingContent] = useState("");
 
   const handleAddModel = () => {
     const trimmed = newModel.trim();
@@ -55,6 +65,35 @@ export function ModelSettings({ className }: ModelSettingsProps) {
         setDefaultModel(available[0]);
       }
     }
+  };
+
+  const handleAddPreset = () => {
+    if (!presetName.trim() || !presetContent.trim()) return;
+    addPromptPreset({ name: presetName, content: presetContent });
+    setPresetName("");
+    setPresetContent("");
+  };
+
+  const handleStartEdit = (presetId: string) => {
+    const preset = promptPresets.find((entry) => entry.id === presetId);
+    if (!preset) return;
+    setEditingPresetId(presetId);
+    setEditingName(preset.name);
+    setEditingContent(preset.content);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingPresetId) return;
+    updatePromptPreset({ id: editingPresetId, name: editingName, content: editingContent });
+    setEditingPresetId(null);
+    setEditingName("");
+    setEditingContent("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingPresetId(null);
+    setEditingName("");
+    setEditingContent("");
   };
 
   return (
@@ -155,6 +194,91 @@ export function ModelSettings({ className }: ModelSettingsProps) {
             checked={contextRepairEnabled}
             onCheckedChange={setContextRepairEnabled}
           />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="space-y-1">
+          <Label className="text-sm font-medium">Prompt presets</Label>
+          <p className="text-xs text-muted-foreground">
+            Save reusable instructions and insert them quickly from the rewrite bubble.
+          </p>
+        </div>
+        <div className="space-y-2 rounded-md border p-3">
+          <div className="grid gap-2">
+            <Input
+              placeholder="Preset name"
+              value={presetName}
+              onChange={(event) => setPresetName(event.target.value)}
+              className="h-9"
+            />
+            <Textarea
+              placeholder="Describe what the rewrite should do…"
+              value={presetContent}
+              onChange={(event) => setPresetContent(event.target.value)}
+              rows={3}
+            />
+            <Button type="button" onClick={handleAddPreset} disabled={!presetName.trim() || !presetContent.trim()}>
+              Add preset
+            </Button>
+          </div>
+          {promptPresets.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No presets yet. Create one above.</p>
+          ) : (
+            <div className="space-y-3">
+              {promptPresets.map((preset) => {
+                const isEditing = editingPresetId === preset.id;
+                return (
+                  <div key={preset.id} className="rounded-md border border-border/60 p-3">
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <Input
+                          value={editingName}
+                          onChange={(event) => setEditingName(event.target.value)}
+                          className="h-8"
+                        />
+                        <Textarea
+                          value={editingContent}
+                          onChange={(event) => setEditingContent(event.target.value)}
+                          rows={4}
+                        />
+                        <div className="flex items-center gap-2">
+                          <Button type="button" size="sm" onClick={handleSaveEdit} disabled={!editingContent.trim()}>
+                            Save
+                          </Button>
+                          <Button type="button" size="sm" variant="secondary" onClick={handleCancelEdit}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-medium text-sm">{preset.name}</p>
+                            <p className="text-xs text-muted-foreground line-clamp-2">{preset.content}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button type="button" size="sm" variant="secondary" onClick={() => handleStartEdit(preset.id)}>
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => removePromptPreset(preset.id)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 

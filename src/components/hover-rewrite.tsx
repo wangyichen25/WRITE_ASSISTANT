@@ -67,6 +67,8 @@ export function HoverRewrite({
   const [online, setOnline] = useState(onlineMode);
   const contextRepairEnabled = useEditorStore((state) => state.contextRepairEnabled);
   const setContextRepairEnabled = useEditorStore((state) => state.setContextRepairEnabled);
+  const promptPresets = useEditorStore((state) => state.promptPresets);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [lastSelection, setLastSelection] = useState<SelectionRange>(null);
@@ -84,6 +86,13 @@ export function HoverRewrite({
   useEffect(() => {
     isPinnedRef.current = isPinned;
   }, [isPinned]);
+
+  useEffect(() => {
+    if (!selectedPresetId) return;
+    if (!promptPresets.some((preset) => preset.id === selectedPresetId)) {
+      setSelectedPresetId(null);
+    }
+  }, [promptPresets, selectedPresetId]);
 
   useEffect(() => {
     const updateSelection = () => {
@@ -276,10 +285,51 @@ export function HoverRewrite({
         onPointerDown={pinBubble}
       >
         <div className="space-y-2">
+          {promptPresets.length > 0 && (
+            <div className="space-y-1">
+              <Label htmlFor="preset" className="text-xs text-muted-foreground">
+                Prompt preset
+              </Label>
+              <Select
+                value={selectedPresetId ?? ""}
+                onValueChange={(value) => {
+                  if (!value) {
+                    setSelectedPresetId(null);
+                    return;
+                  }
+                  const preset = promptPresets.find((entry) => entry.id === value);
+                  if (!preset) return;
+                  setSelectedPresetId(value);
+                  setInstruction(preset.content);
+                }}
+              >
+                <SelectTrigger id="preset" className="h-8 text-xs">
+                  <SelectValue placeholder="Select preset" />
+                </SelectTrigger>
+                <SelectContent onMouseEnter={pinBubble} onMouseLeave={unpinBubble}>
+                  <SelectItem value="" className="text-xs text-muted-foreground">
+                    Custom instruction
+                  </SelectItem>
+                  {promptPresets.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id} className="text-xs">
+                      {preset.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <Textarea
             placeholder="e.g. Tighten the prose while keeping the narrator's voice."
             value={instruction}
-            onChange={(event) => setInstruction(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+              setInstruction(value);
+              if (promptPresets.length > 0) {
+                const matched = promptPresets.find((preset) => preset.content === value.trim());
+                setSelectedPresetId(matched ? matched.id : null);
+              }
+            }}
             rows={3}
             className="resize-none text-sm"
             onFocus={() => {
