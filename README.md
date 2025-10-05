@@ -8,6 +8,7 @@ Write Assistant is a local-first manuscript editor built with Next.js 15, SQLite
 - **SQLite persistence**: Documents, chapters, and edit operations are persisted with Prisma. Chapter content is stored as UTF-8 plain text, and an FTS5 virtual table powers fast search.
 - **Rich editor**: Tiptap-based editor with autosave, inline selection bubble for rewrite instructions, and per-chapter history of applied edits.
 - **LLM rewrites**: Select any passage, provide instructions, choose a model, and trigger a rewrite via OpenRouter. Optional `:online` mode fetches lightweight web context to improve factual grounding.
+- **Context repair loop**: An optional, precise second-pass LLM call can surgically fix continuity issues around the rewritten text. Enable or disable it globally from Settings, or flip the switch on the hover bubble for one-off edits.
 - **Modern UI stack**: App Router, Tailwind CSS v4, shadcn/ui, Zustand for UI state, and React Query for data fetching.
 
 ## Getting Started
@@ -43,6 +44,15 @@ Write Assistant is a local-first manuscript editor built with Next.js 15, SQLite
    ```
 
    The app runs on [http://localhost:3000](http://localhost:3000).
+
+5. **Tune defaults in Settings**
+
+   Open the cog menu in the top-right corner to set:
+
+   - Default rewrite model (with support for custom slugs).
+   - Whether rewrites request online context by default.
+   - Context window, temperature, and max tokens.
+   - The new **Context repair default**, which controls whether the continuity pass runs automatically after each rewrite.
 
 ## Project Structure
 
