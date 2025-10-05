@@ -291,9 +291,9 @@ export function HoverRewrite({
                 Prompt preset
               </Label>
               <Select
-                value={selectedPresetId ?? ""}
+                value={selectedPresetId ?? "__none__"}
                 onValueChange={(value) => {
-                  if (!value) {
+                  if (value === "__none__") {
                     setSelectedPresetId(null);
                     return;
                   }
@@ -307,7 +307,7 @@ export function HoverRewrite({
                   <SelectValue placeholder="Select preset" />
                 </SelectTrigger>
                 <SelectContent onMouseEnter={pinBubble} onMouseLeave={unpinBubble}>
-                  <SelectItem value="" className="text-xs text-muted-foreground">
+                  <SelectItem value="__none__" className="text-xs text-muted-foreground">
                     Custom instruction
                   </SelectItem>
                   {promptPresets.map((preset) => (
