@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import type { Editor } from "@tiptap/react";
 import { Button } from "@/components/ui/button";
@@ -254,12 +254,6 @@ export function HoverRewrite({
     }, 150);
   };
 
-  const shouldShowBubble = useCallback(({ editor: ed }: { editor: Editor }) => {
-    if (isPinnedRef.current) return true;
-    const { from, to } = ed.state.selection;
-    return from !== to;
-  }, []);
-
   const bubbleMenuOptions = useMemo(
     () => ({
       placement: "top-start" as const,
@@ -275,7 +269,7 @@ export function HoverRewrite({
       editor={editor}
       className="z-30"
       options={bubbleMenuOptions}
-      shouldShow={shouldShowBubble}
+      shouldShow={() => true}
     >
       <div
         className="w-80 rounded-lg border bg-popover p-3 text-popover-foreground shadow"
